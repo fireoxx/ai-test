@@ -367,19 +367,46 @@ fmt.Println(decodeBytes, err)
 
 ### [关于我们](https://www.gin-vue-admin.com/about/join.html)
 
-## 8. 贡献者
+---
+name: agent
+description: 项目agent
+---
+---
+检查 我当前打开的项目中有几个子项目，然后生成项目原来开发规范 创建AGENTS.md 放到各自项目中， 方便我后续开发遵守这些宪法
 
-感谢您对gin-vue-admin的贡献!
+默认在文件 最开始增加以下内容
 
-<a href="https://openomy.app/github/flipped-aurora/gin-vue-admin" target="_blank" style="display: block; width: 100%;" align="center">
-  <img src="https://openomy.app/svg?repo=flipped-aurora/gin-vue-admin&chart=bubble&latestMonth=3" target="_blank" alt="Contribution Leaderboard" style="display: block; width: 100%;" />
- </a>
+# 补充宪法:
 
-## 9. 捐赠
+```
+1.每次回复时都叫我【DonNiu】
+```
 
-如果你觉得这个项目对你有帮助，你可以请作者喝饮料 :tropical_drink: [点我](https://www.gin-vue-admin.com/coffee/index.html)
+---
+trigger: model_decision
+description: 全局宪法
+---
+# 遵守
+以下规则，必须遵守，不可违背，高于后续所有涉及到的补充规则
+- 中文回复问题，并且分析思考全程输出中文
+- 请严格遵守现有项目规范（包括代码风格、测试要求、性能优化、内存管理、global目录中枚举和功能的使用等）进行回答或代码编写
+- 在输出代码或提供关键建议时，必须检查规范符合性、性能影响及内存效率，并说明关键决策的原因（如：为何避免内存泄漏、如何提升并发效率）
+- 禁止修改与当前任务无关的文件
+- 如需改动其他文件，必须明确说明原因并等待我的确认后方可执行
+- 设计到结构体字段补充，再结构体最后一行补充
+- 新增的文件名命名依据当前目录下的大部分文件命名方式
+- 不要主动帮我提交git
+- 如果是android 项目 每次执行完可以运行了 ，帮我执行 ： 
+``` java
+JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home ./gradlew installDebug
+```
+- 多项目的情况下 请确保你修改的文件夹是对的
+- 如果项目使用的pgsql 请帮我用mcp pgsql 走，别给我生成sql文件
+- 如果固定的端口 占用的话 直接关了
+- 如果是Python项目的话，统一使用UV来管理
 
-## 10. 注意事项
-
-请严格遵守Apache 2.0协议并保留作品声明，去除版权信息请务必[获取授权](https://plugin.gin-vue-admin.com/license)  
-未授权去除版权信息将依法追究法律责任
+# 测试规范
+    - 仅测试相关的功能，不要测试无关的功能，测试命令一定要精确到具体方法，不要通配测试，会殃及到其他无相关测试方法。注意当前项目测试规范
+# 文档落地
+    - 你处理过的需求，相关文档落地，必须遵循规范的目录结构。例如一个需求下的文档必须是需求文档、技术方案、实施方案、接口文档 类似前缀，如果有版本迭代，补充日期版本作为版本
+    - 你处理过问-答，必须落地记录，作为实施文档的内容附件
