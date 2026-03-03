@@ -1,0 +1,45 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "丸拍 API",
+    "description": "丸拍APP后端API接口",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:10020",
+      "description": "开发环境"
+    }
+  ],
+  "tags": [],
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Response": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "状态码"
+          },
+          "msg": {
+            "type": "string",
+            "description": "消息"
+          },
+          "data": {
+            "type": "object",
+            "description": "数据"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "MemberAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-token",
+        "description": "会员JWT Token，通过登录接口获取，放在请求头 x-token 中"
+      }
+    }
+  }
+}
