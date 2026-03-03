@@ -658,8 +658,8 @@ def generate_openapi(apis: list) -> dict:
     doc = {
         "openapi": "3.0.0",
         "info": {
-            "title": "丸拍 API",
-            "description": "丸拍APP后端API接口",
+            "title": "API",
+            "description": "APP后端API接口",
             "version": "1.0.0"
         },
         "servers": [

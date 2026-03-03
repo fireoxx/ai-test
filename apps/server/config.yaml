@@ -96,8 +96,8 @@ mcp:
     version: v1.0.0
     sse_path: /sse
     message_path: /message
-    url_prefix: ""
-    addr: 8889
+    url_prefix: "http://127.0.0.1:8888"
+    addr: 8888
     separate: false
 minio:
     endpoint: yourEndpoint
