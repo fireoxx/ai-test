@@ -1,0 +1,73 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "启动 GVA Server",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/apps/server/main.go",
+            "cwd": "${workspaceFolder}/apps/server",
+            "env": {},
+            "args": [],
+            "showLog": true
+        },
+        {
+            "name": "启动 Server",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "${workspaceFolder}/apps/server/main.go",
+            "cwd": "${workspaceFolder}/apps/server",
+            "env": {
+                "GVA_CONFIG": "config.docker.yaml"
+            },
+            "args": []
+        },
+        {
+            "name": "启动 Web 管理端",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "pnpm dev",
+            "cwd": "${workspaceFolder}/apps/web"
+        },
+        {
+            "name": "启动 H5Drift",
+            "type": "node-terminal",
+            "request": "launch",
+            "command": "npm run dev",
+            "cwd": "${workspaceFolder}/apps/H5Drift"
+        },
+        {
+            "name": "附加到运行中的进程",
+            "type": "go",
+            "request": "attach",
+            "mode": "local",
+            "processId": "${command:pickProcess}"
+        }
+    ],
+    "compounds": [
+        {
+            "name": "启动所有服务",
+            "configurations": [
+                "启动 GVA Server",
+                "启动 Web 管理端",
+                "启动 H5Drift",
+            ],
+            "stopAll": true,
+            "presentation": {
+                "hidden": false,
+                "group": "all",
+                "order": 1
+            }
+        },
+        {
+            "name": "启动后端+管理端",
+            "configurations": [
+                "启动 GVA Server",
+                "启动 Web 管理端",
+            ],
+            "stopAll": true
+        }
+    ]
+}
