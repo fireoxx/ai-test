@@ -50,6 +50,10 @@ func Routers() *gin.Engine {
 			sseServer.SSEHandler().ServeHTTP(c.Writer, c.Request)
 		})
 
+		Router.POST(global.GVA_CONFIG.MCP.SSEPath, func(c *gin.Context) {
+			sseServer.SSEHandler().ServeHTTP(c.Writer, c.Request)
+		})
+
 		Router.POST(global.GVA_CONFIG.MCP.MessagePath, func(c *gin.Context) {
 			sseServer.MessageHandler().ServeHTTP(c.Writer, c.Request)
 		})
@@ -58,6 +62,7 @@ func Routers() *gin.Engine {
 	systemRouter := router.RouterGroupApp.System
 	exampleRouter := router.RouterGroupApp.Example
 	driftBottleRouter := router.RouterGroupApp.DriftBottle
+	advertisementRouter := router.RouterGroupApp.Advertisement
 	// 如果想要不使用nginx代理前端网页，可以修改 web/.env.production 下的
 	// VUE_APP_BASE_API = /
 	// VUE_APP_BASE_PATH = http://localhost
@@ -117,6 +122,7 @@ func Routers() *gin.Engine {
 		exampleRouter.InitFileUploadAndDownloadRouter(PrivateGroup)         // 文件上传下载功能路由
 		exampleRouter.InitAttachmentCategoryRouterRouter(PrivateGroup)      // 文件上传下载分类
 		driftBottleRouter.InitDriftBottleRouter(PrivateGroup, PublicGroup)  // 漂流瓶路由
+		advertisementRouter.InitAdvertisementRouter(PrivateGroup, PublicGroup) // 广告位管理路由
 
 	}
 

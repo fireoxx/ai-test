@@ -7,6 +7,7 @@
       <div class="wave wave3"></div>
     </div>
 
+    <div class="app-inner">
     <!-- 顶部 -->
     <header class="app-header">
       <span class="app-title">漂流瓶</span>
@@ -140,12 +141,44 @@
 
     <!-- Toast 提示 -->
     <div v-if="toastMsg" class="toast">{{ toastMsg }}</div>
+
+    <!-- 底部广告位 -->
+    <div v-if="showAd" class="ad-container">
+      <div v-if="loadingAd" class="ad-content">
+        <div class="ad-loading">广告加载中...</div>
+      </div>
+      <div v-else-if="currentAd" class="ad-content">
+        <div class="ad-badge">广告</div>
+        <div class="ad-main">
+          <div class="ad-title">{{ currentAd.title }}</div>
+          <div class="ad-desc">{{ currentAd.description }}</div>
+          <a href="javascript:void(0)" @click="handleAdClick" class="ad-link">查看详情</a>
+          <div v-if="adList.length > 1" class="ad-indicators">
+            <span 
+              v-for="(ad, index) in adList" 
+              :key="ad.id"
+              class="ad-indicator"
+              :class="{ active: index === currentAdIndex }"
+              @click="switchAd(index)"
+            ></span>
+          </div>
+        </div>
+        <div class="ad-actions">
+          <button class="ad-refresh" @click="refreshAd" title="刷新广告">
+            ↻
+          </button>
+          <button class="ad-close" @click="closeAd" title="关闭广告">×</button>
+        </div>
+      </div>
+    </div>
+    </div><!-- /app-inner -->
   </div>
 </template>
 
 <script setup>
 import { ref, watch, onMounted } from 'vue'
 import { throwBottle, pickBottle, replyBottle, getMyBottles, getBottleDetail } from '@/api/driftBottle'
+import { getSuitableAd, recordAdView, recordAdClick } from '@/api/advertisement'
 
 // 设备ID
 const getDeviceId = () => {
@@ -182,6 +215,180 @@ const saveNickname = () => {
 // 页面
 const page = ref('home')
 const goPage = (p) => { page.value = p }
+
+// 广告位功能
+const showAd = ref(true)
+const currentAd = ref(null)
+const loadingAd = ref(false)
+const adList = ref([])
+const currentAdIndex = ref(0)
+const adTimer = ref(null)
+
+
+// 关闭广告
+const closeAd = () => {
+  showAd.value = false
+  stopAdRotation()
+  // 可以设置一段时间后再显示，比如24小时
+  localStorage.setItem('drift_ad_closed', Date.now().toString())
+}
+
+// 检查广告是否在24小时内被关闭过
+const isAdClosed = () => {
+  const closedTime = localStorage.getItem('drift_ad_closed')
+  if (!closedTime) return false
+  return Date.now() - parseInt(closedTime) < 24 * 60 * 60 * 1000
+}
+
+// 获取广告数据
+const fetchAdData = async () => {
+  if (loadingAd.value) return
+  
+  loadingAd.value = true
+  try {
+    const res = await getSuitableAd({ deviceId })
+    if (res.code === 0 && res.data) {
+      let ads = Array.isArray(res.data) ? res.data : [res.data]
+      
+      adList.value = ads
+      
+      // 有forcePopup广告则强制显示，否则检查是否被关闭过
+      const hasForceAd = ads.some(ad => ad.forcePopup === true)
+      showAd.value = hasForceAd ? true : !isAdClosed()
+      
+      if (adList.value.length > 0) {
+        currentAd.value = adList.value[0]
+        startAdRotation()
+        
+        // 记录广告展示
+        if (currentAd.value && currentAd.value.id) {
+          recordAdView({
+            adId: currentAd.value.id,
+            deviceId,
+            position: 'bottom'
+          }).catch(() => {})
+        }
+      }
+    } else {
+      // 如果API没有返回广告，使用默认广告
+      const defaultAds = getDefaultAds()
+      adList.value = defaultAds
+      currentAd.value = defaultAds[0]
+      startAdRotation()
+    }
+  } catch (error) {
+    console.error('获取广告失败:', error)
+    // 使用默认广告
+    const defaultAds = getDefaultAds()
+    adList.value = defaultAds
+    currentAd.value = defaultAds[0]
+    startAdRotation()
+  } finally {
+    loadingAd.value = false
+  }
+}
+
+// 广告轮播
+const startAdRotation = () => {
+  if (adList.value.length <= 1) return
+  
+  clearInterval(adTimer.value)
+  adTimer.value = setInterval(() => {
+    currentAdIndex.value = (currentAdIndex.value + 1) % adList.value.length
+    currentAd.value = adList.value[currentAdIndex.value]
+    
+    // 记录新广告展示
+    if (currentAd.value && currentAd.value.id) {
+      recordAdView({
+        adId: currentAd.value.id,
+        deviceId,
+        position: 'bottom'
+      }).catch(() => {})
+    }
+  }, 10000) // 每10秒切换一次广告
+}
+
+// 停止广告轮播
+const stopAdRotation = () => {
+  clearInterval(adTimer.value)
+  adTimer.value = null
+}
+
+// 手动切换广告
+const switchAd = (index) => {
+  if (index >= 0 && index < adList.value.length) {
+    currentAdIndex.value = index
+    currentAd.value = adList.value[index]
+    
+    // 重置轮播计时器
+    if (adTimer.value) {
+      clearInterval(adTimer.value)
+      startAdRotation()
+    }
+    
+    // 记录广告展示
+    if (currentAd.value && currentAd.value.id) {
+      recordAdView({
+        adId: currentAd.value.id,
+        deviceId,
+        position: 'bottom'
+      }).catch(() => {})
+    }
+  }
+}
+
+// 获取默认广告列表（当API失败时使用）
+const getDefaultAds = () => {
+  return [
+    {
+      id: 1,
+      title: '探索更多有趣应用',
+      description: '发现更多创意H5应用，体验不一样的互动乐趣',
+      link: 'https://example.com/more-apps'
+    },
+    {
+      id: 2,
+      title: 'AI创意工具推荐',
+      description: '使用AI工具提升创作效率，激发无限创意',
+      link: 'https://example.com/ai-tools'
+    },
+    {
+      id: 3,
+      title: '开发者学习资源',
+      description: '免费学习前端开发，掌握最新技术栈',
+      link: 'https://example.com/learn-dev'
+    },
+    {
+      id: 4,
+      title: '漂流瓶技巧分享',
+      description: '学习如何写出吸引人的漂流瓶内容',
+      link: 'https://example.com/drift-tips'
+    }
+  ]
+}
+
+// 广告链接点击处理
+const handleAdClick = () => {
+  if (!currentAd.value) return
+  
+  // 记录广告点击
+  if (currentAd.value.id) {
+    recordAdClick({
+      adId: currentAd.value.id,
+      deviceId,
+      position: 'bottom'
+    }).catch(() => {}) // 静默失败
+  }
+  
+  // 在新标签页打开链接
+  window.open(currentAd.value.link, '_blank')
+}
+
+// 刷新广告
+const refreshAd = async () => {
+  stopAdRotation()
+  await fetchAdData()
+}
 
 // 日期格式化
 const formatDate = (dateStr) => {
@@ -299,6 +506,16 @@ onMounted(() => {
   if (!savedNickname.value) showNicknameModal.value = true
   throwForm.value.nickname = savedNickname.value
   replyForm.value.nickname = savedNickname.value
+  
+  // 初始化广告
+  fetchAdData()
+})
+
+// 组件卸载时清理
+import { onUnmounted } from 'vue'
+onUnmounted(() => {
+  stopAdRotation()
+  clearTimeout(toastTimer)
 })
 </script>
 
@@ -311,6 +528,17 @@ onMounted(() => {
   overflow-x: hidden;
   font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
+  display: flex;
+  justify-content: center;
+}
+
+.app-inner {
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ===== 海浪 ===== */
@@ -358,8 +586,7 @@ onMounted(() => {
   position: relative;
   z-index: 10;
   padding: 16px 20px 120px;
-  max-width: 480px;
-  margin: 0 auto;
+  flex: 1;
 }
 
 .back-btn {
@@ -513,4 +740,161 @@ onMounted(() => {
   z-index: 200;
   white-space: nowrap;
 }
+
+/* ===== 底部广告位 ===== */
+.ad-container {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 480px;
+  background: rgba(255, 255, 255, 0.95);
+  border-top: 1px solid #e0e0e0;
+  padding: 12px 16px;
+  z-index: 150;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(10px);
+}
+
+.ad-content {
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.ad-badge {
+  background: #ff6b6b;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.ad-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ad-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ad-desc {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ad-link {
+  display: inline-block;
+  font-size: 12px;
+  color: #4ba8d1;
+  text-decoration: none;
+  margin-top: 4px;
+  font-weight: 500;
+}
+
+.ad-link:hover {
+  text-decoration: underline;
+}
+
+.ad-close {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 20px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 8px;
+  border-radius: 50%;
+}
+
+.ad-close:hover {
+  background: #f5f5f5;
+  color: #666;
+}
+
+.ad-loading {
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+  width: 100%;
+  padding: 8px 0;
+}
+
+/* 广告指示器 */
+.ad-indicators {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ad-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ddd;
+  cursor: pointer;
+  transition: background 0.3s, transform 0.3s;
+}
+
+.ad-indicator:hover {
+  background: #bbb;
+  transform: scale(1.2);
+}
+
+.ad-indicator.active {
+  background: #4ba8d1;
+  transform: scale(1.2);
+}
+
+/* 广告操作按钮 */
+.ad-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.ad-refresh {
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 16px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.3s;
+}
+
+.ad-refresh:hover {
+  background: #f5f5f5;
+  color: #4ba8d1;
+  transform: rotate(90deg);
+}
+
+
 </style>

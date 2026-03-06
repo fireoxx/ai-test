@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/flipped-aurora/gin-vue-admin/server/global"
+	"github.com/flipped-aurora/gin-vue-admin/server/model/advertisement"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/driftbottle"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/example"
 	"github.com/flipped-aurora/gin-vue-admin/server/model/system"
@@ -75,6 +76,7 @@ func RegisterTables() {
 
 		driftbottle.DriftBottle{},
 		driftbottle.DriftBottleReply{},
+		advertisement.Advertisement{},
 	)
 	if err != nil {
 		global.GVA_LOG.Error("register table failed", zap.Error(err))

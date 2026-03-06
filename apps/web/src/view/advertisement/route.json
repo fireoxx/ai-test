@@ -1,0 +1,13 @@
+{
+  "path": "/advertisement",
+  "name": "Advertisement",
+  "component": "view/advertisement/index.vue",
+  "meta": {
+    "title": "广告位管理",
+    "icon": "advertisement",
+    "defaultMenu": false,
+    "closeTab": false,
+    "keepAlive": true
+  },
+  "children": []
+}
