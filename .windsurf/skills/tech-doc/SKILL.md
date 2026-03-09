@@ -29,17 +29,27 @@ apps/server/
 │   └── {module}/     # 业务模型（含 request/ 和 response/ 子目录）
 ├── service/          # 业务逻辑层（禁止在 handler 直接操作数据库）
 ├── router/           # 路由注册（按模块分文件）
-├── global/           # 全局变量（GVA_DB、GVA_LOG、GVA_CONFIG、GVA_REDIS）
+├── global/           # 全局变量（GVA_DB、GVA_LOG、GVA_CONFIG、GVA_REDIS、GVA_Concurrency_Control）
+├── config/           # 配置结构体定义（对应 config.yaml）
+├── initialize/       # 启动初始化逻辑（gorm.go 注册 AutoMigrate、router.go 注册路由组）
 ├── middleware/       # Gin 中间件
+├── mcp/              # MCP 服务（AI 工具调用相关）
+├── task/             # 定时任务（多机部署必须加分布式锁）
 └── utils/            # 工具函数
 ```
 
-**前端：**
+**前端（管理后台）：**
 ```
 apps/web/src/
 ├── view/             # 页面组件（按模块分目录）
-├── api/              # 前端接口封装（对应后端路由）
-└── router/           # 前端路由
+├── api/              # 前端接口封装（对应后端路由，文件名与模块对应）
+├── router/           # 前端路由注册
+├── pinia/            # 状态管理
+└── components/       # 公共组件
+```
+
+**前端（H5 端）：**
+```
 apps/H5Drift/src/
 ├── views/            # H5 页面组件
 └── api/              # H5 接口封装
@@ -50,27 +60,45 @@ apps/H5Drift/src/
 ## 关键规范速查
 
 ### Handler 层
-- 参数绑定：`c.ShouldBindJSON` / `c.ShouldBindQuery`
+- **GET 请求**：`c.ShouldBindQuery`，入参结构体 tag 用 `form`
+- **POST 请求**：`c.ShouldBindJSON`，入参结构体 tag 用 `json`
 - 成功响应：`response.OkWithData(data, c)` / `response.OkWithMessage(msg, c)`
-- 失败响应：`response.FailWithMessage(err.Error(), c)`
+- 失败响应：`response.FailWithMessage(err.Error(), c)`（系统错误不要直接暴露给用户，记日志后返回业务描述）
 - 日志：`global.GVA_LOG.Error("失败", zap.Error(err))`
 - 禁止在 handler 直接写业务逻辑或操作数据库
+- 每个 Handler 函数**必须写完整 Swagger 注解**
 
 ### Service 层
 - 数据库操作：`global.GVA_DB`
-- 事务：`global.GVA_DB.Transaction(func(tx *gorm.DB) error { ... })`
+- 事务：`global.GVA_DB.Transaction(func(tx *gorm.DB) error { ... })`（事务内禁止调用外部 HTTP 接口）
 - 日志：`global.GVA_LOG.Error/Info/Warn`
+- `gorm.ErrRecordNotFound` 需单独处理，不视为系统错误
+- 并发控制（防重复请求）：`global.GVA_Concurrency_Control`（singleflight）
+- 禁止在循环中单条查询数据库，必须批量查询后在内存处理
 
 ### Model 层
 - 嵌入 `global.GVA_MODEL` 获取 ID/CreatedAt/UpdatedAt 字段
 - 字段必须带完整 tag：`json` + `gorm` + 可选 `binding`
 - 新增字段追加到结构体**最后一行**，禁止插入中间
 - 请求结构体放 `model/{module}/request/`，响应结构体放 `model/{module}/response/`
+- 列表接口响应需包含 `total`、`page`、`pageSize`
 
 ### 路由层
 - 路由文件放 `router/{module}/`
 - 需要鉴权的路由挂在带有 `JWTAuth()` 中间件的路由组下
-- 查看 `router/` 目录下现有文件确认路由分组
+- 路由命名：路由 Handler 名用 camelCase，路径用 lowerCamelCase
+- 注册后在 `router/enter.go` 中引用，并在 `initialize/router.go` 中挂载
+
+### Swagger 注解规范（每个 Handler 必须写）
+```go
+// @Tags     ModuleName
+// @Summary  接口描述
+// @Security ApiKeyAuth
+// @Produce  application/json
+// @Param    data  body      moduleReq.XxxRequest  true  "请求体描述"
+// @Success  200   {object}  response.Response{data=moduleRes.XxxResponse,msg=string}  "成功"
+// @Router   /api/path [post]
+```
 
 ### 数据库规范
 - **优先使用 PostgreSQL**
@@ -82,6 +110,8 @@ apps/H5Drift/src/
   - 字符串：`varchar`，小数：`decimal`，禁止 float/double
   - 所有字段 `NOT NULL DEFAULT`，text/jsonb 除外
   - 禁止外键约束，禁止创建触发器
+- **索引设计**：常用查询条件字段必须建索引，在 GORM tag 中用 `index` 标注
+- 禁止使用 `fmt.Sprintf` 拼接 SQL，必须用 `?` 占位符
 
 ---
 
@@ -222,7 +252,7 @@ apps/H5Drift/src/
 ```go
 type {StructName} struct {
     global.GVA_MODEL
-    Name      string    `json:"name"      gorm:"column:name;not null;default:'';comment:名称"`
+    Name      string    `json:"name"      gorm:"column:name;not null;default:'';comment:名称;index"`
     Status    int       `json:"status"    gorm:"column:status;not null;default:1;comment:状态 1启用 0禁用"`
     CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;not null;default:'1970-01-01 08:00:00';comment:创建时间"`
     UpdatedAt time.Time `json:"updatedAt" gorm:"column:updated_at;not null;default:'1970-01-01 08:00:00';comment:更新时间"`
@@ -232,6 +262,8 @@ func ({StructName}) TableName() string {
     return "{table_name}"
 }
 ```
+
+> 常用查询条件字段在 gorm tag 中加 `index` 标注，复合索引用 `index:idx_name`。
 
 ### 3.2 字段变更（追加到 Model 结构体末尾）
 
@@ -262,11 +294,14 @@ db.AutoMigrate(&model.{StructName}{})
 ```go
 // @Tags     {ModuleName}
 // @Summary  {接口描述}
+// @Security ApiKeyAuth
 // @Produce  application/json
 // @Param    data  body      {module}Req.{XxxRequest}  true  "{请求体描述}"
 // @Success  200   {object}  response.Response{data={module}Res.{XxxResponse},msg=string}  "成功"
 // @Router   /api/{path} [{method}]
 ```
+
+> GET 接口 Param 用 `query` 而非 `body`：`// @Param field query string false "字段说明"`
 
 **请求参数**
 | 字段 | 类型 | 必填 | 说明 |
@@ -308,6 +343,8 @@ db.AutoMigrate(&model.{StructName}{})
 ## 五、核心实现思路
 
 ### 5.1 Handler 层
+
+**POST 示例（ShouldBindJSON，入参 tag 用 json）**
 ```go
 func (a *XxxApi) CreateXxx(c *gin.Context) {
     var req xxxReq.CreateXxxRequest
@@ -321,6 +358,24 @@ func (a *XxxApi) CreateXxx(c *gin.Context) {
         return
     }
     response.OkWithMessage("创建成功", c)
+}
+```
+
+**GET 示例（ShouldBindQuery，入参 tag 用 form）**
+```go
+func (a *XxxApi) GetXxxList(c *gin.Context) {
+    var req xxxReq.GetXxxListRequest
+    if err := c.ShouldBindQuery(&req); err != nil {
+        response.FailWithMessage(err.Error(), c)
+        return
+    }
+    list, total, err := xxxService.GetXxxList(req)
+    if err != nil {
+        global.GVA_LOG.Error("获取列表失败", zap.Error(err))
+        response.FailWithMessage("获取失败", c)
+        return
+    }
+    response.OkWithData(xxxRes.GetXxxListResponse{List: list, Total: total}, c)
 }
 ```
 
@@ -346,16 +401,18 @@ func (a *XxxApi) CreateXxx(c *gin.Context) {
 
 ## 七、实施顺序建议
 
-1. 通过 MCP pgsql 确认数据库表结构
-2. 新增/更新 Model 定义（`model/{module}/xxx.go`）
+1. 通过 MCP pgsql 确认现有数据库表结构（`\d table_name`）
+2. 新增/更新 Model 定义（`model/{module}/xxx.go`），常用查询字段加 `index` tag
 3. 注册 AutoMigrate（`initialize/gorm.go`）
 4. 新增请求/响应结构体（`model/{module}/request/` 和 `response/`）
+   - GET 接口入参用 `form` tag；POST 接口入参用 `json` tag
 5. 实现 Service 业务逻辑（`service/{module}/xxx.go`）
-6. 实现 Handler 层（`api/v1/{module}/xxx.go`）
+6. 实现 Handler 层（`api/v1/{module}/xxx.go`），每个函数写完整 Swagger 注解
 7. 注册路由（`router/{module}/xxx.go`）
-8. 在各 `enter.go` 中注册新增的结构体
-9. 前端接口封装 + 页面开发（如涉及）
-10. 联调验证
+8. 在各 `enter.go` 中注册新增的结构体（`api/v1/enter.go`、`service/enter.go`、`router/enter.go`）
+9. 如需新增路由组，在 `initialize/router.go` 中挂载
+10. 前端接口封装 + 页面开发（如涉及）
+11. 联调验证
 ```
 
 ---
@@ -363,8 +420,12 @@ func (a *XxxApi) CreateXxx(c *gin.Context) {
 ## 使用注意事项
 
 1. **不存在的内容不要捏造**：接口字段、数据库字段必须来自代码或用户描述，不得猜测
-2. **影响范围要完整**：不要遗漏 `enter.go` 等注册文件的改动
+2. **影响范围要完整**：不要遗漏 `enter.go` 等注册文件和 `initialize/router.go` 的改动
 3. **数据库操作通过 MCP pgsql**：不生成独立 SQL 文件，不手写 DDL
 4. **路由分组要准确**：查看 `router/` 目录下现有文件及 `initialize/router.go` 确认路由组定义
-5. **文档输出后不实施**：生成文档是 /plan 阶段的终点，等用户确认
-6. **方案中的不确定点必须列出**：需要用户决策的点逐一确认后再实施，不可自行假设
+5. **GET/POST tag 要区分**：GET 接口入参 tag 用 `form`，POST 接口入参 tag 用 `json`，混用会导致绑定失败
+6. **Swagger 注解不能遗漏**：每个 Handler 函数必须有完整注解（@Tags/@Summary/@Security/@Param/@Success/@Router）
+7. **文档输出后不实施**：生成文档是 /plan 阶段的终点，等用户确认
+8. **方案中的不确定点必须列出**：需要用户决策的点逐一确认后再实施，不可自行假设
+9. **gorm.ErrRecordNotFound 单独处理**：不视为系统错误，不打 Error 日志
+10. **禁止循环查库**：循环中需要查询多条数据时，改为批量查询后在内存处理

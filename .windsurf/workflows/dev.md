@@ -52,7 +52,10 @@ SQL
    - `apps/server/api/v1/` — Handler 层
    - `apps/server/service/` — 业务逻辑层
    - `apps/server/model/` — 数据库模型及请求/响应结构体
-   - `apps/server/global/` — 全局变量（GVA_DB、GVA_LOG、GVA_CONFIG、GVA_REDIS）
+   - `apps/server/global/` — 全局变量（GVA_DB、GVA_LOG、GVA_CONFIG、GVA_REDIS、GVA_Concurrency_Control）
+   - `apps/server/config/` — 配置结构体
+   - `apps/server/initialize/` — 路由组初始化、AutoMigrate 注册
+   - `apps/server/task/` — 定时任务（如涉及）
    - `apps/web/src/view/` — 管理后台页面
    - `apps/H5Drift/src/views/` — H5 页面
 
@@ -96,9 +99,13 @@ SQL
 
 3. 严格遵循 `AGENTS.md` 及 `go-code-rule.md` 中的代码规范：
    - Handler 只做参数绑定/校验/调用service/返回响应
+   - **GET 请求用 `c.ShouldBindQuery`，入参 tag 用 `form`；POST 请求用 `c.ShouldBindJSON`，入参 tag 用 `json`**
    - 使用 `response.OkWithData` / `response.FailWithMessage`
    - 日志使用 `global.GVA_LOG`，携带 `zap.Error(err)`
-   - 每个 Handler 函数必须写完整 Swagger 注解
+   - 每个 Handler 函数必须写完整 Swagger 注解（含 `@Security ApiKeyAuth`）
+   - `gorm.ErrRecordNotFound` 单独处理，不视为系统错误
+   - 禁止循环单条查库，改为批量查询内存处理
+   - 如涉及新路由组，在 `initialize/router.go` 中挂载
 
 4. 实施过程中若发现与方案有偏差，**暂停并告知用户**后再继续。
 
